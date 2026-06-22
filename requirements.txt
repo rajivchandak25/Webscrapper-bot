@@ -1,7 +1,8 @@
 streamlit
 transformers
 torch
+torchvision
 sentence-transformers
 requests
 beautifulsoup4
-duckduckgo-search
+ddgs
