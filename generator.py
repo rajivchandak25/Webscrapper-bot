@@ -18,9 +18,8 @@ class TransformerGenerator:
         """
         Loads the Seq2Seq Transformer model and tokenizer.
         """
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(self.device)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
     def format_structured_context(self, query: str, chunks: List[Dict[str, Any]]) -> tuple:
         """
@@ -69,7 +68,7 @@ class TransformerGenerator:
             max_length=1024,
             return_tensors="pt",
             truncation=True
-        ).to(self.device)
+        )
 
         # Generate abstractive summary with expanded token length
         summary_ids = self.model.generate(
