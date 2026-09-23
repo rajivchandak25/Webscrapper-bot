@@ -1,17 +1,22 @@
 from bot import QABot
 
 # -------------------------------
-# Run Chatbot
+# Interactive CLI Entrypoint
 # -------------------------------
 if __name__ == "__main__":
     bot = QABot()
-    print("🤖 Q&A Bot ready! Type 'exit' to quit.\n")
+    print("Q&A Bot ready! Type 'exit' to quit.\n")
 
     while True:
-        query = input("You: ")
-        if query.lower() == "exit":
-            print("Bot: Goodbye! 👋")
+        try:
+            query = input("You: ").strip()
+            if not query:
+                continue
+            if query.lower() in ["exit", "quit", "q"]:
+                print("Bot: Goodbye!")
+                break
+            answer = bot.ask(query)
+            print("\nBot:\n" + answer + "\n")
+        except (KeyboardInterrupt, EOFError):
+            print("\nBot: Goodbye!")
             break
-        answer = bot.ask(query)
-        print("Bot:", answer)
-        print()

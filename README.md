@@ -1,129 +1,134 @@
-# 🤖 Webscrapper Bot: Local RAG Q&A Assistant
+# Local RAG Q&A Assistant: Anti-Bot Web Scraper & Transformer Pipeline
 
-A completely free, local Retrieval-Augmented Generation (RAG) agent that answers user questions by searching the web, crawling article texts, summarizing search content, and semantic-ranking the findings. 
+A completely free, 100% local Retrieval-Augmented Generation (RAG) assistant that queries the web, bypasses anti-scraping paywalls, performs sliding-window overlapping chunking, reranks passages with dense embeddings, and synthesizes comprehensive answers (up to 1,500 characters) using local Hugging Face transformer models.
 
-This project runs 100% locally using standard open-source Python libraries, local Hugging Face transformer pipelines, and DuckDuckGo Search APIs. **No API keys or paid accounts are required.**
+**Runs entirely on your machine. No API keys, accounts, or paid services required.**
 
 ---
 
-## 📐 System Architecture (How it Works)
+## System Architecture & Pipeline Stages
 
-This bot implements the standard RAG pipeline locally:
+This project demonstrates a multi-stage LLM/RAG pipeline designed to run efficiently on local hardware:
 
 ```mermaid
-graph TD
-    A[User Inputs Query] --> B{Knowledge Base Lookup}
-    B -- Match Found --> C[Return Offline Memory Answer]
-    B -- No Match --> D[DuckDuckGo Search]
-    D --> E[Web Crawler Scrapes Paragraphs]
-    E --> F[Local BART Model Summarizes Text]
-    F --> G[SentenceTransformer Embeds Summaries]
-    G --> H[Semantic Cosine Similarity Ranking]
-    H --> I[Return Highest-Scoring Summary]
+flowchart TD
+    A["User Inputs Question"] --> B{"Offline Knowledge Base"}
+    B -- "Match Found" --> C["Return Instant Answer"]
+    B -- "No Match" --> D["DuckDuckGo Search Engine"]
+    D --> E["Anti-Bot Resilient Crawler"]
+    E -- "Blocked / Paywalled (e.g., CNN)" --> F["DuckDuckGo Snippet Fallback"]
+    E -- "Accessible" --> G["Clean HTML & Extract Body"]
+    F --> H["Document Ingestion Pool"]
+    G --> H
+    H --> I["Sliding-Window Overlapping Chunking"]
+    I --> J["Dense Embedding & Semantic Reranker (all-MiniLM-L6-v2)"]
+    J --> K["Top-k Relevant Chunks Selection"]
+    K --> L["Structured JSON Context Assembly"]
+    L --> M["Seq2Seq Generator (BART-large-cnn)"]
+    M --> N["Rich Synthesis Output (Summary + Evidence + Sources)"]
 
     style C fill:#10b981,stroke:#047857,color:#ffffff
-    style I fill:#3b82f6,stroke:#1d4ed8,color:#ffffff
+    style N fill:#3b82f6,stroke:#1d4ed8,color:#ffffff
 ```
-
-1. **Query Input**: The user inputs a text question via the Streamlit interface.
-2. **Knowledge Base (Offline Memory)**: The query is matched against a local dictionary of static answers first (immediate retrieval).
-3. **Web Search**: If there is no local match, the bot queries DuckDuckGo for top-relevant links.
-4. **Scraping**: The scraper crawls each page and extracts text content.
-5. **Local Summarization**: A local BART model (`facebook/bart-large-cnn`) generates a summary for each scraped webpage.
-6. **Semantic Ranking**: The query and summaries are converted into vector embeddings using a local `SentenceTransformer` model (`all-MiniLM-L6-v2`).
-7. **Similarity Comparison**: Vector cosine-similarity is computed to select the summary most semantically aligned with the user query, and returned to the user.
 
 ---
 
-## 🛠️ Step-by-Step Installation Tutorial
+## Key Engineering Innovations & Academic Showcase
 
-Follow these steps to run the bot locally on your machine:
+### 1. Anti-Bot Defense & Paywall Immunity
+* **The Problem:** Modern news and corporate sites (such as CNN, Bloomberg, and Reuters) block basic web scrapers with HTTP `401`/`403` status codes or serve paywall / login gates (*"Please sign in to continue"*). Naive scrapers mistake these short login notices for actual page content.
+* **The Solution:** 
+  - Realistic browser header spoofing (`User-Agent`, `Sec-Ch-Ua`, `Accept-Language`, `Sec-Fetch-*`).
+  - Strict HTTP `200` status verification.
+  - Heuristic pattern matching against bot challenges, login gates, and cookie modals.
+  - **Zero-Drop Search Snippet Fallback:** If a site blocks direct scraping, the crawler automatically falls back to DuckDuckGo's pre-extracted search snippet (`body`), ensuring the pipeline never fails or returns login prompts.
+
+### 2. Overlapping Sliding-Window Chunking (`chunker.py`)
+* Instead of naive document slicing or arbitrary character cuts, documents are processed using a sliding window with configurable word overlap (e.g., 180 words per chunk with 40 words overlap).
+* This preserves semantic context and entity relationships that span across sentence boundaries, preventing critical information loss at chunk edges.
+
+### 3. Dense Vector Retrieval & Semantic Reranking (`retriever.py`)
+* Employs `sentence-transformers/all-MiniLM-L6-v2` as a local bi-encoder.
+* Maps user queries and candidate chunks into a shared 384-dimensional dense vector space.
+* Uses PyTorch cosine similarity to rerank all generated chunks, discarding irrelevant noise and selecting only the top-$k$ highest-confidence passages.
+
+### 4. Structured JSON Context Formatting (`generator.py`)
+* Retrieved passages are organized into an explicit, structured JSON schema (`{"query": ..., "passages": [...]}`) before prompt assembly.
+* Provides clear provenance and unambiguous source separation, reducing hallucinations and enabling smoother summarization.
+
+### 5. High-Density Abstractive Generation & Source Attribution
+* Uses `facebook/bart-large-cnn` to synthesize comprehensive answers (up to 1,500 characters).
+* Combines the abstractive transformer summary with key evidence quotes from the top-ranked passage and clickable Markdown source links.
+
+---
+
+## Project Structure
+
+```
+Webscrapper-bot/
+├── app.py              # Streamlit Web UI with interactive Pipeline Inspector
+├── bot.py              # Master RAG pipeline orchestrator
+├── chunker.py          # Sliding-window overlapping text chunker
+├── generator.py        # Structured JSON prompt formatter & Seq2Seq generator
+├── knowledge_base.py   # Offline memory dictionary for instant retrieval
+├── main.py             # Interactive CLI entrypoint
+├── requirements.txt    # Project dependencies (100% free / open source)
+├── retriever.py        # Dense embedding & semantic reranker (all-MiniLM-L6-v2)
+├── websearch.py        # DuckDuckGo search & anti-bot resilient web scraper
+└── README.md           # System documentation & tutorials
+```
+
+---
+
+## Installation & Setup
 
 ### 1. Clone the Repository
-Open your terminal and clone the repository:
 ```bash
 git clone https://github.com/rajivchandak25/Webscrapper-bot.git
 cd Webscrapper-bot
 ```
 
-### 2. Set Up a Virtual Environment (Optional but Recommended)
-Set up a clean environment to manage dependencies:
+### 2. Set Up a Virtual Environment (Recommended)
 ```bash
-# Create environment
+# Create virtual environment
 python -m venv venv
 
-# Activate on Windows:
+# Windows:
 venv\Scripts\activate
 
-# Activate on macOS/Linux:
+# macOS / Linux:
 source venv/bin/activate
 ```
 
 ### 3. Install Dependencies
-Install the required packages:
 ```bash
 pip install -r requirements.txt
 ```
-> **Note**: This will download PyTorch, Streamlit, Transformers, and DuckDuckGo Search modules. It may take a few minutes as PyTorch packages are large.
 
 ---
 
-## 🚀 How to Run the Bot
+## How to Run
 
-Launch the Streamlit web dashboard:
+### Option A: Streamlit Web Dashboard (Recommended)
+Launch the graphical interface with full pipeline inspection:
 ```bash
 streamlit run app.py
 ```
-After executing this, Streamlit will open a web interface in your default browser, typically at **`http://localhost:8501`**.
+* Open your browser at `http://localhost:8501`.
+* Expand the **Pipeline Inspection** section under any answer to observe the exact scraping status, overlapping chunks, dense similarity scores, and structured JSON context!
+
+### Option B: Terminal Command-Line Interface
+Run the interactive CLI:
+```bash
+python main.py
+```
 
 ---
 
-## 📖 Code Walkthrough & Tutorials
-
-Here is an explanation of the core modules in the bot to help you understand the implementation:
-
-### 1. The Entrypoint (`app.py`)
-This file drives the Streamlit graphical interface:
-```python
-import streamlit as st
-from bot import QABot
-
-# Save bot instance in session state so it doesn't re-initialize on every refresh
-if "bot" not in st.session_state:
-    st.session_state.bot = QABot()
-
-st.title("🤖 Q&A Bot")
-query = st.text_input("Your question:", "")
-
-if query:
-    with st.spinner("Thinking..."):
-        answer = st.session_state.bot.ask(query)
-    st.write(answer)
-```
-
-### 2. The Crawler & Summarizer (`websearch.py`)
-This module queries DuckDuckGo for links, crawls page paragraphs using BeautifulSoup, and uses the BART Seq2Seq model to compile summaries.
-* **AutoTokenizer & AutoModelForSeq2SeqLM** are used to load BART locally.
-* Inputs are truncated to `max_length=1024` tokens to avoid token-overflow constraints in BART.
-
-### 3. The Semantic Reranker (`retriever.py`)
-This module embeds the user query and the compiled summaries into vector spaces using `SentenceTransformer('all-MiniLM-L6-v2')` and ranks them via PyTorch Cosine Similarity:
-```python
-query_emb = self.embedder.encode(query, convert_to_tensor=True)
-summary_embs = self.embedder.encode(summaries, convert_to_tensor=True)
-
-# Calculate Cosine Similarity Matrix
-scores = util.pytorch_cos_sim(query_emb, summary_embs)[0]
-best_idx = scores.argmax().item()
-return summaries[best_idx]
-```
-
-### 4. Customizing the Local Knowledge Base (`knowledge_base.py`)
-You can add predefined answers to bypass web searches. Open `knowledge_base.py` and modify the dictionary:
-```python
-self.data = {
-    "hello": "Hi there! How can I help you?",
-    "who are you": "I am a simple Q&A bot built using Python and Hugging Face.",
-    "your custom query": "Your custom preset response goes here!"
-}
-```
+## Technologies Used
+* **Python 3.10+**
+* **Streamlit** (Web application and interactive inspector)
+* **PyTorch & Hugging Face Transformers** (`facebook/bart-large-cnn`)
+* **Sentence-Transformers** (`all-MiniLM-L6-v2`)
+* **BeautifulSoup4 & Requests** (DOM parsing and session scraping)
+* **DuckDuckGo Search (`ddgs`)** (Free search engine API)
