@@ -4,6 +4,7 @@ Generator Module: Structured Context Formatting & Seq2Seq Generation
 Formats retrieved RAG chunks into structured JSON context representations,
 and uses a Seq2Seq transformer (facebook/bart-large-cnn) to synthesize a
 comprehensive answer (up to 1500 characters) strictly conditioned on retrieved evidence.
+Includes robust fallback for constrained cloud environments.
 """
 
 from typing import List, Dict, Any
@@ -40,6 +41,22 @@ class TransformerGenerator:
         json_repr = json.dumps(structured_dict, indent=2)
         return json_repr, passages
 
+    def _extract_key_sentences(self, passages: List[Dict[str, Any]], max_sentences: int = 4) -> str:
+        """
+        Extractive synthesis fallback if generation encounters runtime/memory issues.
+        """
+        extracted = []
+        for p in passages:
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", p.get("text", "")) if len(s.strip()) > 35]
+            for s in sentences:
+                if s not in extracted:
+                    extracted.append(s)
+                if len(extracted) >= max_sentences:
+                    break
+            if len(extracted) >= max_sentences:
+                break
+        return " ".join(extracted) if extracted else "Relevant information found across retrieved sources."
+
     def generate_comprehensive_answer(
         self,
         query: str,
@@ -70,18 +87,24 @@ class TransformerGenerator:
             truncation=True
         )
 
-        # Generate abstractive summary with expanded token length
-        summary_ids = self.model.generate(
-            inputs["input_ids"],
-            num_beams=4,
-            min_length=70,
-            max_length=350,
-            length_penalty=1.2,
-            no_repeat_ngram_size=3,
-            early_stopping=True
-        )
-
-        raw_summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True).strip()
+        raw_summary = ""
+        try:
+            # Enforce inference mode to disable autograd and prevent TorchDynamo decomposition errors
+            with torch.inference_mode():
+                summary_ids = self.model.generate(
+                    inputs["input_ids"],
+                    attention_mask=inputs.get("attention_mask"),
+                    num_beams=4,
+                    min_length=70,
+                    max_length=350,
+                    length_penalty=1.2,
+                    no_repeat_ngram_size=3,
+                    early_stopping=True
+                )
+                raw_summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True).strip()
+        except Exception as e:
+            print(f"[Generator] Note: Transformer generation fallback used ({e})")
+            raw_summary = self._extract_key_sentences(passages)
 
         # Clean any CNN/DailyMail dataset artifacts if present
         cleaned_summary = re.sub(r"(For more information|For confidential support|visit: http).*$", "", raw_summary, flags=re.IGNORECASE).strip()
